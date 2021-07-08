@@ -7,7 +7,8 @@ use App\Models\GoodsShare;
 use App\Models\ScheduleLog;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
-use PHPExcel_IOFactory;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Reader\Exception;
 
 class ResolveRecommendCommand extends Command
 {
@@ -43,9 +44,7 @@ class ResolveRecommendCommand extends Command
     public function handle()
     {
         $path                                           =   config('taobao.excel_path');
-        Log::info('resolve');
-        $dp                                             =   '';
-        Log::info($path);
+
         if(is_dir($path)){
             $dp = dir($path);
         }else{
@@ -53,7 +52,7 @@ class ResolveRecommendCommand extends Command
         }
         $files                                          =   array();
         while ($file = $dp ->read()){
-            if($file !="." && $file !=".." && is_file($path.DIRECTORY_SEPARATOR.$file)){
+            if($file !="." && $file !=".." && is_file($path.DIRECTORY_SEPARATOR.$file) && stripos($file,'xls')){
                 $files[] = $path.DIRECTORY_SEPARATOR.$file;
 
             }
@@ -72,20 +71,22 @@ class ResolveRecommendCommand extends Command
     }
 
     protected function resolve($file){
-        Log::info($file);
-        if(strpos($file,'xls')){
-            $log                                            =   new ScheduleLog();
-            $log->name                                      =   $file;
-            $log->md5                                       =   md5_file($file);
-            $log->save();
+        if(stripos($file,'xls')){
+
             try {
+                $log = new ScheduleLog();
+                $log->name = $file;
+                $log->md5 = md5_file($file);
+                $log->save();
                 set_time_limit(300);
                 ini_set("memory_limit", "512M");
                 //设置以Excel5格式(Excel97-2003工作簿)
-                $reader = PHPExcel_IOFactory::createReader('Excel5');
+                $inputFileType = IOFactory::identify($file);
+                $reader = IOFactory::createReader($inputFileType);
                 $PHPExcel = $reader->load($file); // 载入excel文件
                 $sheet = $PHPExcel->getSheet(0); // 读取第一個工作表
                 $highestRow = $sheet->getHighestRow(); // 取得总行数
+                Log::info('共计'.($highestRow-1).'个商品');
                 $fields = [];
                 for ($i = 'A'; $i < 'ZZ'; $i++) {
                     $title = $sheet->getCell($i . '1')->getValue();
@@ -140,8 +141,8 @@ class ResolveRecommendCommand extends Command
                                 $fields['from_site'] = $i;
                                 break;
                             default:
-                                if(is_numeric($title)){
-                                    $fields['channel_id']=$title;
+                                if (is_numeric($title)) {
+                                    $fields['channel_id'] = $title;
                                 }
                         }
                     } else {
@@ -151,7 +152,8 @@ class ResolveRecommendCommand extends Command
                 }
 
                 /** 循环读取每个单元格的数据 */
-                for ($row = 2; $row <=$highestRow; $row++) {//行数是以第1行开始
+                for ($row = 2; $row <= $highestRow; $row++) {//行数是以第1行开始
+                    Log::info('开始执行第'.($row-1).'条');
                     $recommendGoods = GoodsShare::getByNumIid($sheet->getCell($fields['original_id'] . $row)->getValue());
                     if (empty($recommendGoods)) {
                         $recommendGoods = new GoodsShare();
@@ -169,10 +171,10 @@ class ResolveRecommendCommand extends Command
                         }
                         $recommendGoods->item_url = $sheet->getCell($fields['item_url'] . $row)->getValue();
                     }
-                    if(isset($fields['volume'])){
+                    if (isset($fields['volume'])) {
                         $recommendGoods->volume = $sheet->getCell($fields['volume'] . $row)->getValue();
                     }
-                    if(isset($fields['from_site'])){
+                    if (isset($fields['from_site'])) {
                         $recommendGoods->from_site = $sheet->getCell($fields['from_site'] . $row)->getValue();
                     }
                     $recommendGoods->price = $sheet->getCell($fields['price'] . $row)->getValue();
@@ -180,52 +182,57 @@ class ResolveRecommendCommand extends Command
                     $recommendGoods->coupon_end_time = $sheet->getCell($fields['coupon_end_time'] . $row)->getValue();
                     $recommendGoods->coupon_remain_count = $sheet->getCell($fields['coupon_remain_count'] . $row)->getValue();
                     $recommendGoods->channel_id = $recommendGoods->channel_id ? $recommendGoods->channel_id : 1;
-                    if(isset($fields['channel_id'])){
-                        $recommendGoods->channel_id             =   $fields['channel_id'];
+                    if (isset($fields['channel_id'])) {
+                        $recommendGoods->channel_id = $fields['channel_id'];
                     }
-                    if(isset($fields['coupon_info'])){
-                        $couponInfo                             =   $sheet->getCell($fields['coupon_info'] . $row)->getValue();
-                        if(!empty($couponInfo) && $couponInfo!='无'){
-                            preg_match_all('/\d+/',$couponInfo , $matches);
+                    if (isset($fields['coupon_info'])) {
+                        $couponInfo = $sheet->getCell($fields['coupon_info'] . $row)->getValue();
+                        if (!empty($couponInfo) && $couponInfo != '无') {
+                            preg_match_all('/\d+/', $couponInfo, $matches);
 
                             if ($matches) {
-                                if(strpos($couponInfo,'无条件')){
-                                    $recommendGoods->coupon_amount = isset($matches[0][0]) ? $matches[0][0] : 0;
-                                    $recommendGoods->coupon_start_fee=0;
-                                }else{
-                                    $recommendGoods->coupon_amount = isset($matches[0][1]) ? $matches[0][1] : 0;
-                                    $recommendGoods->coupon_start_fee = isset($matches[0][0]) ? $matches[0][0] : 0;
+                                if (strpos($couponInfo, '无条件')) {
+                                    $recommendGoods->coupon_amount = isset($matches[0][0]) ? intval($matches[0][0]) : 0;
+                                    $recommendGoods->coupon_start_fee = 0;
+                                } else {
+                                    $recommendGoods->coupon_amount = isset($matches[0][1]) ? intval($matches[0][1]) : 0;
+                                    $recommendGoods->coupon_start_fee = isset($matches[0][0]) ? intval($matches[0][0]) : 0;
                                 }
 
                             }
-                            $recommendGoods->coupon_status      =   1;
+                            $recommendGoods->coupon_status = 1;
                         }
 
                     }
 
-                    $clickUrl                                   =   $sheet->getCell($fields['click_url'] . $row)->getValue();
-                    if(strpos($clickUrl,'uland') >0){
-                        $recommendGoods->coupon_click_url       =   $clickUrl;
-                    }else{
-                        $recommendGoods->click_url              =   $clickUrl;
+                    $clickUrl = $sheet->getCell($fields['click_url'] . $row)->getValue();
+                    if (strpos($clickUrl, 'uland') > 0) {
+                        $recommendGoods->coupon_click_url = $clickUrl;
+                    } else {
+                        $recommendGoods->click_url = $clickUrl;
                     }
 
-                    if(isset($fields['coupon_click_url'])){
+                    if (isset($fields['coupon_click_url'])) {
                         $recommendGoods->coupon_click_url = $sheet->getCell($fields['coupon_click_url'] . $row)->getValue();
                         $pos = strpos($recommendGoods->coupon_click_url, '&pid');
                         if ($pos > 0) {
                             $recommendGoods->coupon_click_url = mb_strcut($recommendGoods->coupon_click_url, 0, $pos);
                         }
                     }
-                    $recommendGoods->coupon_price               =   $recommendGoods->price-$recommendGoods->coupon_amount;
+
+                    $recommendGoods->coupon_price = $recommendGoods->price - intval($recommendGoods->coupon_amount);
+                    $recommendGoods->is_recommend = 1;
+
                     $recommendGoods->save();
                 }
-            } catch (\PHPExcel_Reader_Exception $e) {
+            } catch (Exception $e) {
                 Log::error($e->getMessage());
-            } catch (\PHPExcel_Exception $e) {
+            } catch (\PhpOffice\PhpSpreadsheet\Exception $e) {
                 Log::error($e->getMessage());
             }
+
             unlink($file);
+
         }
 
 

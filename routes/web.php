@@ -21,9 +21,10 @@ Route::get('/app','TaobaoController@openApp')->name('taobao.open.app');
 Route::get('/goods/recommend','TaobaoController@recommend')->name('taobao.recommend');
 Route::get('/taobao/item/{id}','TaobaoController@item');
 Route::any('/client/collect','TaobaoController@saveClientCollect')->name('client.collect');
-Route::group(['middleware'=>['web','category','throttle']], function(){
+Route::group(['middleware'=>['web','throttle:30,3']], function(){
     Auth::routes();
     Route::get('/go/{num_iid}','GoodsController@go');
+    Route::get('/desc','GoodsController@desc')->name('goods.desc');
     Route::resource('/article',ArticleController::class);
     Route::get('/category/lists','CategoryController@lists');
     Route::get('/category/{id}/{title?}/{subId?}/{sort?}/{desc?}','CategoryController@category')->name('category.show');

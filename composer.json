@@ -1,13 +1,13 @@
 {
-    "name": "laravel/laravel",
-    "description": "The Laravel Framework.",
-    "keywords": ["framework", "laravel"],
+    "name": "jcove/small-go",
+    "description": "淘宝客程序",
+    "keywords": ["淘宝客", "laravel"],
     "license": "MIT",
     "type": "project",
     "require": {
         "php": ">=7.0.0",
         "encore/laravel-admin": "1.5.*",
-        "fideloper/proxy": "~3.3",
+        "fideloper/proxy": "~4.0",
         "guzzlehttp/guzzle": "^6.3",
         "jcove/taobao-sdk": "dev-master",
         "laravel-admin-ext/media-manager": "^1.0",
@@ -19,8 +19,8 @@
         "overtrue/laravel-wechat": "~4.0",
         "overtrue/pinyin": "^3.0",
         "peinhu/aetherupload-laravel": "~1.0",
-        "phpoffice/phpexcel": "^1.8",
-        "rachidlaasri/laravel-installer": "^3.2"
+        "phpoffice/phpspreadsheet": "^1.6",
+        "predis/predis": "1.1"
     },
     "require-dev": {
         "filp/whoops": "~2.0",

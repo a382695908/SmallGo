@@ -7,18 +7,11 @@
 
 namespace App\Http\Controllers;
 
-
 use App\Common\TaoBao;
-use App\Models\Ad;
-use App\Models\Category;
-use App\Models\GoodsGallery;
 use App\Models\GoodsShare;
-use App\Models\History;
-use App\Models\RecommendGoods;
-use App\Models\TagGoods;
 use Carbon\Carbon;
-use TbkItemInfoGetRequest;
-use TopClient;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+
 
 class GoodsController extends Controller
 {
@@ -55,7 +48,6 @@ class GoodsController extends Controller
             }
             $data['goods']                          =   $goods;
         }
-
         return smallgo_view('goods.item',$data);
     }
 
@@ -69,11 +61,22 @@ class GoodsController extends Controller
         $coupon_start_time                  =   request()->coupon_start_time;
         $coupon_end_time                    =   request()->coupon_end_time;
         $coupon_amount                      =   request()->coupon_amount;
+        $coupon_click_url                   =   request()->coupon_click_url;
         $taobao                             =   new TaoBao();
         $goods                              =   $taobao->item($num_iid);
-        $goods->coupon_start_time           =   $coupon_start_time;
-        $goods->coupon_end_time             =   $coupon_end_time;
-        $goods->coupon_amount               =   $coupon_amount;
+
+        if(empty($goods)){
+            throw new NotFoundHttpException("商品不存在");
+        }
+        if($coupon_amount){
+            $goods->coupon_start_time           =   $coupon_start_time;
+            $goods->coupon_end_time             =   $coupon_end_time;
+            $goods->coupon_amount               =   $coupon_amount;
+            $goods->coupon_status               =   1;
+            $goods->coupon_click_url            =   $coupon_click_url;
+            $goods->coupon_price                =   $goods->price - $goods->coupon_amount;
+        }
+
         $data['title']                      =   $goods->title;
         $data['goods']                      =   $goods;
         $data['code']                       =   base64_encode($click_url);
@@ -82,6 +85,10 @@ class GoodsController extends Controller
 
     public function go($num_iid){
         return smallgo_view('goods.go',['id'=>$num_iid]);
+    }
+
+    public function desc(){
+        return smallgo_view('goods.desc');
     }
 
 }
